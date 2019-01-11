@@ -15,6 +15,7 @@ import Html.Attributes as Attr
 import Html.Styled as HS
 import Http
 import Resource
+import Resource.Msgs as Msgs
 import Test exposing (..)
 import Test.Html.Event as Event
 import Test.Html.Query as Query
@@ -114,7 +115,7 @@ all =
                     |> givenResourceIsNotPinned
                     |> givenVersionsWithoutPagination
                     |> Resource.update
-                        (Resource.ExpandVersionedResource versionID)
+                        (Msgs.ExpandVersionedResource versionID)
                     |> Tuple.first
                     |> givenVersionsWithoutPagination
                     |> queryView
@@ -126,10 +127,10 @@ all =
                     |> givenResourceIsNotPinned
                     |> givenVersionsWithoutPagination
                     |> Resource.update
-                        (Resource.ExpandVersionedResource versionID)
+                        (Msgs.ExpandVersionedResource versionID)
                     |> Tuple.first
                     |> Resource.update
-                        (Resource.InputToFetched versionID
+                        (Msgs.InputToFetched versionID
                             (Ok
                                 [ { id = 0
                                   , name = "some-build"
@@ -152,10 +153,10 @@ all =
                     |> givenResourceIsNotPinned
                     |> givenVersionsWithoutPagination
                     |> Resource.update
-                        (Resource.ExpandVersionedResource versionID)
+                        (Msgs.ExpandVersionedResource versionID)
                     |> Tuple.first
                     |> Resource.update
-                        (Resource.OutputOfFetched versionID
+                        (Msgs.OutputOfFetched versionID
                             (Ok
                                 [ { id = 0
                                   , name = "some-build"
@@ -221,7 +222,7 @@ all =
                         |> Query.find (versionSelector version)
                         |> Query.find checkboxSelector
                         |> Event.simulate Event.click
-                        |> Event.expect (Resource.ToggleVersion Resource.Disable versionID)
+                        |> Event.expect (Msgs.ToggleVersion Msgs.Disable versionID)
             , test "receiving a (ToggleVersion Disable) msg causes the relevant checkbox to go into a transition state" <|
                 \_ ->
                     init
@@ -249,7 +250,7 @@ all =
                         |> givenResourcePinnedStatically
                         |> givenVersionsWithoutPagination
                         |> clickToDisable versionID
-                        |> Resource.update (Resource.VersionToggled Resource.Disable versionID (Ok ()))
+                        |> Resource.update (Msgs.VersionToggled Msgs.Disable versionID (Ok ()))
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector version)
@@ -260,7 +261,7 @@ all =
                         |> givenResourcePinnedStatically
                         |> givenVersionsWithoutPagination
                         |> clickToDisable versionID
-                        |> Resource.update (Resource.VersionToggled Resource.Disable versionID badResponse)
+                        |> Resource.update (Msgs.VersionToggled Msgs.Disable versionID badResponse)
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector version)
@@ -275,14 +276,14 @@ all =
                         |> Query.find (versionSelector disabledVersion)
                         |> Query.find checkboxSelector
                         |> Event.simulate Event.click
-                        |> Event.expect (Resource.ToggleVersion Resource.Enable disabledVersionID)
+                        |> Event.expect (Msgs.ToggleVersion Msgs.Enable disabledVersionID)
             , test "receiving a (ToggleVersion Enable) msg causes the relevant checkbox to go into a transition state" <|
                 \_ ->
                     init
                         |> givenResourcePinnedStatically
                         |> givenVersionsWithoutPagination
                         |> Resource.update
-                            (Resource.ToggleVersion Resource.Enable disabledVersionID)
+                            (Msgs.ToggleVersion Msgs.Enable disabledVersionID)
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector disabledVersion)
@@ -294,9 +295,9 @@ all =
                         |> givenResourcePinnedStatically
                         |> givenVersionsWithoutPagination
                         |> Resource.update
-                            (Resource.ToggleVersion Resource.Enable disabledVersionID)
+                            (Msgs.ToggleVersion Msgs.Enable disabledVersionID)
                         |> Tuple.first
-                        |> Resource.update (Resource.VersionToggled Resource.Enable disabledVersionID (Ok ()))
+                        |> Resource.update (Msgs.VersionToggled Msgs.Enable disabledVersionID (Ok ()))
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector disabledVersion)
@@ -308,9 +309,9 @@ all =
                         |> givenResourcePinnedStatically
                         |> givenVersionsWithoutPagination
                         |> Resource.update
-                            (Resource.ToggleVersion Resource.Enable disabledVersionID)
+                            (Msgs.ToggleVersion Msgs.Enable disabledVersionID)
                         |> Tuple.first
-                        |> Resource.update (Resource.VersionToggled Resource.Enable disabledVersionID badResponse)
+                        |> Resource.update (Msgs.VersionToggled Msgs.Enable disabledVersionID badResponse)
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector disabledVersion)
@@ -411,7 +412,7 @@ all =
                             |> queryView
                             |> Query.find [ id "pin-bar" ]
                             |> Event.simulate Event.mouseEnter
-                            |> Event.expect Resource.TogglePinBarTooltip
+                            |> Event.expect Msgs.TogglePinBarTooltip
                 , test "TogglePinBarTooltip causes tooltip to appear" <|
                     \_ ->
                         init
@@ -476,7 +477,7 @@ all =
                             |> queryView
                             |> Query.find [ id "pin-bar" ]
                             |> Event.simulate Event.mouseLeave
-                            |> Event.expect Resource.TogglePinBarTooltip
+                            |> Event.expect Msgs.TogglePinBarTooltip
                 , test "when mousing off pin bar, tooltip disappears" <|
                     \_ ->
                         init
@@ -504,7 +505,7 @@ all =
                             |> Query.find (versionSelector version)
                             |> Query.find pinButtonSelector
                             |> Event.simulate Event.mouseOver
-                            |> Event.expect Resource.ToggleVersionTooltip
+                            |> Event.expect Msgs.ToggleVersionTooltip
                 , test "mousing over an unpinned version's pin button doesn't send any msg" <|
                     \_ ->
                         init
@@ -545,7 +546,7 @@ all =
                             |> Query.find (versionSelector version)
                             |> Query.find pinButtonSelector
                             |> Event.simulate Event.mouseOut
-                            |> Event.expect Resource.ToggleVersionTooltip
+                            |> Event.expect Msgs.ToggleVersionTooltip
                 , test "mousing off an unpinned version's pin button doesn't send any msg" <|
                     \_ ->
                         init
@@ -598,7 +599,7 @@ all =
                 \_ ->
                     init
                         |> givenResourcePinnedDynamically
-                        |> Resource.update Resource.TogglePinBarTooltip
+                        |> Resource.update Msgs.TogglePinBarTooltip
                         |> Tuple.first
                         |> queryView
                         |> Query.hasNot pinBarTooltipSelector
@@ -616,7 +617,7 @@ all =
                         |> queryView
                         |> Query.find [ id "pin-icon" ]
                         |> Event.simulate Event.click
-                        |> Event.expect Resource.UnpinVersion
+                        |> Event.expect Msgs.UnpinVersion
             , test "mousing over pin icon triggers PinIconHover msg" <|
                 \_ ->
                     init
@@ -624,12 +625,12 @@ all =
                         |> queryView
                         |> Query.find [ id "pin-icon" ]
                         |> Event.simulate Event.mouseEnter
-                        |> Event.expect (Resource.PinIconHover True)
+                        |> Event.expect (Msgs.PinIconHover True)
             , test "TogglePinIconHover msg causes pin icon to have dark background" <|
                 \_ ->
                     init
                         |> givenResourcePinnedDynamically
-                        |> Resource.update (Resource.PinIconHover True)
+                        |> Resource.update (Msgs.PinIconHover True)
                         |> Tuple.first
                         |> queryView
                         |> Query.find [ id "pin-icon" ]
@@ -638,19 +639,19 @@ all =
                 \_ ->
                     init
                         |> givenResourcePinnedDynamically
-                        |> Resource.update (Resource.PinIconHover True)
+                        |> Resource.update (Msgs.PinIconHover True)
                         |> Tuple.first
                         |> queryView
                         |> Query.find [ id "pin-icon" ]
                         |> Event.simulate Event.mouseLeave
-                        |> Event.expect (Resource.PinIconHover False)
+                        |> Event.expect (Msgs.PinIconHover False)
             , test "second TogglePinIconHover msg causes pin icon to have transparent background color" <|
                 \_ ->
                     init
                         |> givenResourcePinnedDynamically
-                        |> Resource.update (Resource.PinIconHover True)
+                        |> Resource.update (Msgs.PinIconHover True)
                         |> Tuple.first
-                        |> Resource.update (Resource.PinIconHover False)
+                        |> Resource.update (Msgs.PinIconHover False)
                         |> Tuple.first
                         |> queryView
                         |> Query.find [ id "pin-icon" ]
@@ -700,7 +701,7 @@ all =
                         |> Query.find (versionSelector version)
                         |> Query.find pinButtonSelector
                         |> Event.simulate Event.click
-                        |> Event.expect Resource.UnpinVersion
+                        |> Event.expect Msgs.UnpinVersion
             , test "pin button on pinned version shows transition state when (UnpinVersion) is received" <|
                 \_ ->
                     init
@@ -728,7 +729,7 @@ all =
                         |> givenResourcePinnedDynamically
                         |> givenVersionsWithoutPagination
                         |> clickToUnpin
-                        |> Resource.update (Resource.VersionUnpinned (Ok ()))
+                        |> Resource.update (Msgs.VersionUnpinned (Ok ()))
                         |> Tuple.first
                         |> queryView
                         |> pinBarHasUnpinnedState
@@ -738,7 +739,7 @@ all =
                         |> givenResourcePinnedDynamically
                         |> givenVersionsWithoutPagination
                         |> clickToUnpin
-                        |> Resource.update (Resource.VersionUnpinned badResponse)
+                        |> Resource.update (Msgs.VersionUnpinned badResponse)
                         |> Tuple.first
                         |> queryView
                         |> pinBarHasPinnedState version
@@ -868,7 +869,7 @@ all =
                         |> Query.find (versionSelector version)
                         |> Query.find pinButtonSelector
                         |> Event.simulate Event.click
-                        |> Event.expect (Resource.PinVersion versionID)
+                        |> Event.expect (Msgs.PinVersion versionID)
             , test "pin button on 'v1' shows transition state when (PinVersion v1) is received" <|
                 \_ ->
                     init
@@ -916,7 +917,7 @@ all =
                         |> givenResourceIsNotPinned
                         |> givenVersionsWithoutPagination
                         |> clickToPin versionID
-                        |> Resource.update (Resource.VersionPinned (Ok ()))
+                        |> Resource.update (Msgs.VersionPinned (Ok ()))
                         |> Tuple.first
                         |> queryView
                         |> pinBarHasPinnedState version
@@ -926,7 +927,7 @@ all =
                         |> givenResourceIsNotPinned
                         |> givenVersionsWithoutPagination
                         |> clickToPin versionID
-                        |> Resource.update (Resource.VersionPinned badResponse)
+                        |> Resource.update (Msgs.VersionPinned badResponse)
                         |> Tuple.first
                         |> queryView
                         |> pinBarHasUnpinnedState
@@ -936,7 +937,7 @@ all =
                         |> givenResourceIsNotPinned
                         |> givenVersionsWithoutPagination
                         |> clickToPin versionID
-                        |> Resource.update (Resource.VersionPinned badResponse)
+                        |> Resource.update (Msgs.VersionPinned badResponse)
                         |> Tuple.first
                         |> queryView
                         |> Query.find (versionSelector version)
@@ -1139,9 +1140,9 @@ all =
                         ]
                     }
                 , mouseEnterMsg =
-                    Resource.Hover Resource.PreviousPage
+                    Msgs.Hover Msgs.PreviousPage
                 , mouseLeaveMsg =
-                    Resource.Hover Resource.None
+                    Msgs.Hover Msgs.None
                 }
             ]
         , test "check status bar lays out horizontally maximing space" <|
@@ -1174,7 +1175,7 @@ all =
             \_ ->
                 init
                     |> Resource.update
-                        (Resource.ResourceFetched <|
+                        (Msgs.ResourceFetched <|
                             Ok
                                 { teamName = teamName
                                 , pipelineName = pipelineName
@@ -1205,7 +1206,6 @@ all =
 init : Resource.Model
 init =
     Resource.init
-        { title = always Cmd.none }
         { teamName = teamName
         , pipelineName = pipelineName
         , resourceName = resourceName
@@ -1218,7 +1218,7 @@ init =
 givenResourcePinnedStatically : Resource.Model -> Resource.Model
 givenResourcePinnedStatically =
     Resource.update
-        (Resource.ResourceFetched <|
+        (Msgs.ResourceFetched <|
             Ok
                 { teamName = teamName
                 , pipelineName = pipelineName
@@ -1237,7 +1237,7 @@ givenResourcePinnedStatically =
 givenResourcePinnedDynamically : Resource.Model -> Resource.Model
 givenResourcePinnedDynamically =
     Resource.update
-        (Resource.ResourceFetched <|
+        (Msgs.ResourceFetched <|
             Ok
                 { teamName = teamName
                 , pipelineName = pipelineName
@@ -1256,7 +1256,7 @@ givenResourcePinnedDynamically =
 givenResourceIsNotPinned : Resource.Model -> Resource.Model
 givenResourceIsNotPinned =
     Resource.update
-        (Resource.ResourceFetched <|
+        (Msgs.ResourceFetched <|
             Ok
                 { teamName = teamName
                 , pipelineName = pipelineName
@@ -1272,7 +1272,7 @@ givenResourceIsNotPinned =
         >> Tuple.first
 
 
-queryView : Resource.Model -> Query.Single Resource.Msg
+queryView : Resource.Model -> Query.Single Msgs.Msg
 queryView =
     Resource.view
         >> HS.toUnstyled
@@ -1281,38 +1281,38 @@ queryView =
 
 togglePinBarTooltip : Resource.Model -> Resource.Model
 togglePinBarTooltip =
-    Resource.update Resource.TogglePinBarTooltip
+    Resource.update Msgs.TogglePinBarTooltip
         >> Tuple.first
 
 
 toggleVersionTooltip : Resource.Model -> Resource.Model
 toggleVersionTooltip =
-    Resource.update Resource.ToggleVersionTooltip
+    Resource.update Msgs.ToggleVersionTooltip
         >> Tuple.first
 
 
 clickToPin : Int -> Resource.Model -> Resource.Model
 clickToPin versionID =
-    Resource.update (Resource.PinVersion versionID)
+    Resource.update (Msgs.PinVersion versionID)
         >> Tuple.first
 
 
 clickToUnpin : Resource.Model -> Resource.Model
 clickToUnpin =
-    Resource.update Resource.UnpinVersion
+    Resource.update Msgs.UnpinVersion
         >> Tuple.first
 
 
 clickToDisable : Int -> Resource.Model -> Resource.Model
 clickToDisable versionID =
-    Resource.update (Resource.ToggleVersion Resource.Disable versionID)
+    Resource.update (Msgs.ToggleVersion Msgs.Disable versionID)
         >> Tuple.first
 
 
 givenVersionsWithoutPagination : Resource.Model -> Resource.Model
 givenVersionsWithoutPagination =
     Resource.update
-        (Resource.VersionedResourcesFetched Nothing <|
+        (Msgs.VersionedResourcesFetched Nothing <|
             Ok
                 { content =
                     [ { id = versionID
@@ -1343,7 +1343,7 @@ givenVersionsWithoutPagination =
 givenVersionsWithPagination : Resource.Model -> Resource.Model
 givenVersionsWithPagination =
     Resource.update
-        (Resource.VersionedResourcesFetched Nothing <|
+        (Msgs.VersionedResourcesFetched Nothing <|
             Ok
                 { content =
                     [ { id = versionID

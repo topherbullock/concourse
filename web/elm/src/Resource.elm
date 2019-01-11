@@ -1,9 +1,6 @@
 module Resource exposing
     ( Flags
-    , Hoverable(..)
     , Model
-    , Msg(..)
-    , VersionToggleAction(..)
     , changeToResource
     , init
     , subscriptions
@@ -27,6 +24,7 @@ import Date.Format
 import Dict
 import DictView
 import Duration exposing (Duration)
+import Effects exposing (setTitle)
 import Erl
 import Html.Attributes
 import Html.Styled as Html exposing (Html)
@@ -59,6 +57,13 @@ import Pinned
         ( ResourcePinState(..)
         , VersionPinState(..)
         )
+import Resource.Effects exposing (Effect(..), runEffect)
+import Resource.Msgs
+    exposing
+        ( Hoverable(..)
+        , Msg(..)
+        , VersionToggleAction(..)
+        )
 import Resource.Styles
 import Spinner
 import StrictEvents
@@ -67,24 +72,13 @@ import Time exposing (Time)
 import UpdateMsg exposing (UpdateMsg)
 
 
-type alias Ports =
-    { title : String -> Cmd Msg
-    }
-
-
 type PageError
     = Empty
     | NotFound
 
 
-type VersionToggleAction
-    = Enable
-    | Disable
-
-
 type alias Model =
-    { ports : Ports
-    , pageStatus : Result PageError ()
+    { pageStatus : Result PageError ()
     , teamName : String
     , pipelineName : String
     , name : String
@@ -116,35 +110,6 @@ type alias Version =
     }
 
 
-type Hoverable
-    = PreviousPage
-    | NextPage
-    | None
-
-
-type Msg
-    = Noop
-    | AutoupdateTimerTicked Time
-    | ResourceFetched (Result Http.Error Concourse.Resource)
-    | VersionedResourcesFetched (Maybe Page) (Result Http.Error (Paginated Concourse.VersionedResource))
-    | LoadPage Page
-    | ClockTick Time.Time
-    | ExpandVersionedResource Int
-    | InputToFetched Int (Result Http.Error (List Concourse.Build))
-    | OutputOfFetched Int (Result Http.Error (List Concourse.Build))
-    | NavTo String
-    | TogglePinBarTooltip
-    | ToggleVersionTooltip
-    | PinVersion Int
-    | UnpinVersion
-    | VersionPinned (Result Http.Error ())
-    | VersionUnpinned (Result Http.Error ())
-    | ToggleVersion VersionToggleAction Int
-    | VersionToggled VersionToggleAction Int (Result Http.Error ())
-    | PinIconHover Bool
-    | Hover Hoverable
-
-
 type alias Flags =
     { teamName : String
     , pipelineName : String
@@ -154,50 +119,49 @@ type alias Flags =
     }
 
 
-init : Ports -> Flags -> ( Model, Cmd Msg )
-init ports flags =
+init : Flags -> ( Model, List Effect )
+init flags =
     let
-        ( model, cmd ) =
-            changeToResource flags
-                { resourceIdentifier =
-                    { teamName = flags.teamName
-                    , pipelineName = flags.pipelineName
-                    , resourceName = flags.resourceName
+        resourceId =
+            { teamName = flags.teamName
+            , pipelineName = flags.pipelineName
+            , resourceName = flags.resourceName
+            }
+
+        model =
+            { resourceIdentifier = resourceId
+            , pageStatus = Err Empty
+            , teamName = flags.teamName
+            , pipelineName = flags.pipelineName
+            , name = flags.resourceName
+            , failingToCheck = False
+            , checkError = ""
+            , checkSetupError = ""
+            , hovered = None
+            , lastChecked = Nothing
+            , pinnedVersion = NotPinned
+            , currentPage = flags.paging
+            , versions =
+                { content = []
+                , pagination =
+                    { previousPage = Nothing
+                    , nextPage = Nothing
                     }
-                , pageStatus = Err Empty
-                , teamName = flags.teamName
-                , pipelineName = flags.pipelineName
-                , name = flags.resourceName
-                , failingToCheck = False
-                , checkError = ""
-                , checkSetupError = ""
-                , hovered = None
-                , lastChecked = Nothing
-                , pinnedVersion = NotPinned
-                , currentPage = Nothing
-                , versions =
-                    { content = []
-                    , pagination =
-                        { previousPage = Nothing
-                        , nextPage = Nothing
-                        }
-                    }
-                , ports = ports
-                , now = Nothing
-                , csrfToken = flags.csrfToken
-                , showPinBarTooltip = False
-                , pinIconHover = False
                 }
+            , now = Nothing
+            , csrfToken = flags.csrfToken
+            , showPinBarTooltip = False
+            , pinIconHover = False
+            }
     in
     ( model
-    , Cmd.batch
-        [ fetchResource model.resourceIdentifier
-        , cmd
-        ]
+    , [ FetchResource model.resourceIdentifier
+      , FetchVersionedResources resourceId flags.paging
+      ]
     )
 
 
-changeToResource : Flags -> Model -> ( Model, Cmd Msg )
+changeToResource : Flags -> Model -> ( Model, List Effect )
 changeToResource flags model =
     ( { model
         | currentPage = flags.paging
@@ -209,21 +173,24 @@ changeToResource flags model =
                 }
             }
       }
-    , fetchVersionedResources model.resourceIdentifier flags.paging
+    , [ FetchVersionedResources model.resourceIdentifier flags.paging ]
     )
 
 
 updateWithMessage : Msg -> Model -> ( Model, Cmd Msg, Maybe UpdateMsg )
 updateWithMessage message model =
     let
-        ( mdl, msg ) =
+        ( mdl, effects ) =
             update message model
+
+        cmd =
+            List.map runEffect effects |> Cmd.batch
     in
     if mdl.pageStatus == Err NotFound then
-        ( mdl, msg, Just UpdateMsg.NotFound )
+        ( mdl, cmd, Just UpdateMsg.NotFound )
 
     else
-        ( mdl, msg, Nothing )
+        ( mdl, cmd, Nothing )
 
 
 updatePinnedVersion : Concourse.Resource -> Model -> Model
@@ -265,21 +232,18 @@ hasPinnedVersion model v =
             False
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg -> Model -> ( Model, List Effect )
 update action model =
     case action of
         Noop ->
-            ( model, Cmd.none )
+            ( model, [] )
 
         AutoupdateTimerTicked timestamp ->
             ( model
-            , Cmd.batch <|
-                List.append
-                    [ fetchResource model.resourceIdentifier
-                    , fetchVersionedResources model.resourceIdentifier model.currentPage
-                    ]
-                <|
-                    updateExpandedProperties model
+            , [ FetchResource model.resourceIdentifier
+              , FetchVersionedResources model.resourceIdentifier model.currentPage
+              ]
+                ++ updateExpandedProperties model
             )
 
         ResourceFetched (Ok resource) ->
@@ -294,23 +258,23 @@ update action model =
                 , lastChecked = resource.lastChecked
               }
                 |> updatePinnedVersion resource
-            , model.ports.title <| resource.name ++ " - "
+            , [ SetTitle <| resource.name ++ " - " ]
             )
 
         ResourceFetched (Err err) ->
             case Debug.log "failed to fetch resource" err of
                 Http.BadStatus { status } ->
                     if status.code == 401 then
-                        ( model, LoginRedirect.requestLoginRedirect "" )
+                        ( model, [ RedirectToLogin ] )
 
                     else if status.code == 404 then
-                        ( { model | pageStatus = Err NotFound }, Cmd.none )
+                        ( { model | pageStatus = Err NotFound }, [] )
 
                     else
-                        ( model, Cmd.none )
+                        ( model, [] )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( model, [] )
 
         VersionedResourcesFetched requestedPage (Ok paginated) ->
             let
@@ -383,25 +347,24 @@ update action model =
             in
             case requestedPage of
                 Nothing ->
-                    ( newModel (Just fetchedPage), Cmd.none )
+                    ( newModel (Just fetchedPage), [] )
 
                 Just requestedPageUnwrapped ->
                     ( chosenModelWith requestedPageUnwrapped
-                    , Cmd.none
+                    , []
                     )
 
         VersionedResourcesFetched _ (Err err) ->
             flip always (Debug.log "failed to fetch versioned resources" err) <|
-                ( model, Cmd.none )
+                ( model, [] )
 
         LoadPage page ->
             ( { model
                 | currentPage = Just page
               }
-            , Cmd.batch
-                [ fetchVersionedResources model.resourceIdentifier <| Just page
-                , Navigation.newUrl <| paginationRoute model.resourceIdentifier page
-                ]
+            , [ FetchVersionedResources model.resourceIdentifier <| Just page
+              , NavigateTo <| paginationRoute model.resourceIdentifier page
+              ]
             )
 
         ExpandVersionedResource versionID ->
@@ -429,54 +392,53 @@ update action model =
             in
             ( updateVersion versionID (\v -> { v | expanded = newExpandedState }) model
             , if newExpandedState then
-                Cmd.batch
-                    [ fetchInputTo versionedResourceIdentifier
-                    , fetchOutputOf versionedResourceIdentifier
-                    ]
+                [ FetchInputTo versionedResourceIdentifier
+                , FetchOutputOf versionedResourceIdentifier
+                ]
 
               else
-                Cmd.none
+                []
             )
 
         InputToFetched _ (Err err) ->
             case err of
                 Http.BadStatus { status } ->
                     if status.code == 401 then
-                        ( model, LoginRedirect.requestLoginRedirect "" )
+                        ( model, [ RedirectToLogin ] )
 
                     else
-                        ( model, Cmd.none )
+                        ( model, [] )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( model, [] )
 
         InputToFetched versionID (Ok builds) ->
             ( updateVersion versionID (\v -> { v | inputTo = builds }) model
-            , Cmd.none
+            , []
             )
 
         OutputOfFetched _ (Err err) ->
             case err of
                 Http.BadStatus { status } ->
                     if status.code == 401 then
-                        ( model, LoginRedirect.requestLoginRedirect "" )
+                        ( model, [ RedirectToLogin ] )
 
                     else
-                        ( model, Cmd.none )
+                        ( model, [] )
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( model, [] )
 
         ClockTick now ->
-            ( { model | now = Just now }, Cmd.none )
+            ( { model | now = Just now }, [] )
 
         OutputOfFetched versionID (Ok builds) ->
             ( updateVersion versionID (\v -> { v | outputOf = builds }) model
-            , Cmd.none
+            , []
             )
 
         NavTo url ->
-            ( model, Navigation.newUrl url )
+            ( model, [ NavigateTo url ] )
 
         TogglePinBarTooltip ->
             ( { model
@@ -488,7 +450,7 @@ update action model =
                         _ ->
                             False
               }
-            , Cmd.none
+            , []
             )
 
         ToggleVersionTooltip ->
@@ -507,7 +469,7 @@ update action model =
                         _ ->
                             model
             in
-            ( newModel, Cmd.none )
+            ( newModel, [] )
 
         PinVersion versionID ->
             let
@@ -516,21 +478,21 @@ update action model =
                     model.versions.content
                         |> List.Extra.find (\v -> v.id == versionID)
 
-                cmd : Cmd Msg
+                cmd : List Effect
                 cmd =
                     case version of
                         Just v ->
-                            Task.attempt VersionPinned <|
-                                Concourse.Resource.pinVersion
-                                    { teamName = model.resourceIdentifier.teamName
-                                    , pipelineName = model.resourceIdentifier.pipelineName
-                                    , resourceName = model.resourceIdentifier.resourceName
-                                    , versionID = v.id
-                                    }
-                                    model.csrfToken
+                            [ DoPinVersion
+                                { teamName = model.resourceIdentifier.teamName
+                                , pipelineName = model.resourceIdentifier.pipelineName
+                                , resourceName = model.resourceIdentifier.resourceName
+                                , versionID = v.id
+                                }
+                                model.csrfToken
+                            ]
 
                         Nothing ->
-                            Cmd.none
+                            []
 
                 newModel =
                     { model | pinnedVersion = Pinned.startPinningTo versionID model.pinnedVersion }
@@ -541,17 +503,16 @@ update action model =
 
         UnpinVersion ->
             let
-                cmd : Cmd Msg
+                cmd : Effect
                 cmd =
-                    Task.attempt VersionUnpinned <|
-                        Concourse.Resource.unpinVersion
-                            { teamName = model.resourceIdentifier.teamName
-                            , pipelineName = model.resourceIdentifier.pipelineName
-                            , resourceName = model.resourceIdentifier.resourceName
-                            }
-                            model.csrfToken
+                    DoUnpinVersion
+                        { teamName = model.resourceIdentifier.teamName
+                        , pipelineName = model.resourceIdentifier.pipelineName
+                        , resourceName = model.resourceIdentifier.resourceName
+                        }
+                        model.csrfToken
             in
-            ( { model | pinnedVersion = Pinned.startUnpinning model.pinnedVersion }, cmd )
+            ( { model | pinnedVersion = Pinned.startUnpinning model.pinnedVersion }, [ cmd ] )
 
         VersionPinned (Ok ()) ->
             let
@@ -564,40 +525,39 @@ update action model =
                         )
                         model.pinnedVersion
             in
-            ( { model | pinnedVersion = newPinnedVersion }, Cmd.none )
+            ( { model | pinnedVersion = newPinnedVersion }, [] )
 
         VersionPinned (Err _) ->
             ( { model
                 | pinnedVersion = NotPinned
               }
-            , Cmd.none
+            , []
             )
 
         VersionUnpinned (Ok ()) ->
             ( { model
                 | pinnedVersion = NotPinned
               }
-            , Cmd.none
+            , []
             )
 
         VersionUnpinned (Err _) ->
             ( { model
                 | pinnedVersion = Pinned.quitUnpinning model.pinnedVersion
               }
-            , Cmd.none
+            , []
             )
 
         ToggleVersion action versionID ->
             ( updateVersion versionID (\v -> { v | enabled = BoolTransitionable.Changing }) model
-            , Task.attempt (VersionToggled action versionID) <|
-                Concourse.Resource.enableDisableVersionedResource
-                    (action == Enable)
+            , [ DoEnableDisableVersionedResource action
                     { teamName = model.resourceIdentifier.teamName
                     , pipelineName = model.resourceIdentifier.pipelineName
                     , resourceName = model.resourceIdentifier.resourceName
                     , versionID = versionID
                     }
                     model.csrfToken
+              ]
             )
 
         VersionToggled action versionID result ->
@@ -618,14 +578,14 @@ update action model =
                             BoolTransitionable.True
             in
             ( updateVersion versionID (\v -> { v | enabled = newEnabledState }) model
-            , Cmd.none
+            , []
             )
 
         PinIconHover state ->
-            ( { model | pinIconHover = state }, Cmd.none )
+            ( { model | pinIconHover = state }, [] )
 
         Hover hovered ->
-            ( { model | hovered = hovered }, Cmd.none )
+            ( { model | hovered = hovered }, [] )
 
 
 updateVersion : Int -> (Version -> Version) -> Model -> Model
@@ -1427,7 +1387,7 @@ viewBuildsByJob buildDict jobName =
     ]
 
 
-updateExpandedProperties : Model -> List (Cmd Msg)
+updateExpandedProperties : Model -> List Effect
 updateExpandedProperties model =
     let
         filteredList =
@@ -1448,7 +1408,7 @@ isExpanded versions version =
         |> Maybe.withDefault False
 
 
-fetchInputAndOutputs : Model -> Version -> List (Cmd Msg)
+fetchInputAndOutputs : Model -> Version -> List Effect
 fetchInputAndOutputs model version =
     let
         identifier =
@@ -1458,33 +1418,9 @@ fetchInputAndOutputs model version =
             , versionID = version.id
             }
     in
-    [ fetchInputTo identifier
-    , fetchOutputOf identifier
+    [ FetchInputTo identifier
+    , FetchOutputOf identifier
     ]
-
-
-fetchResource : Concourse.ResourceIdentifier -> Cmd Msg
-fetchResource resourceIdentifier =
-    Task.attempt ResourceFetched <|
-        Concourse.Resource.fetchResource resourceIdentifier
-
-
-fetchVersionedResources : Concourse.ResourceIdentifier -> Maybe Page -> Cmd Msg
-fetchVersionedResources resourceIdentifier page =
-    Task.attempt (VersionedResourcesFetched page) <|
-        Concourse.Resource.fetchVersionedResources resourceIdentifier page
-
-
-fetchInputTo : Concourse.VersionedResourceIdentifier -> Cmd Msg
-fetchInputTo versionedResourceIdentifier =
-    Task.attempt (InputToFetched versionedResourceIdentifier.versionID) <|
-        Concourse.Resource.fetchInputTo versionedResourceIdentifier
-
-
-fetchOutputOf : Concourse.VersionedResourceIdentifier -> Cmd Msg
-fetchOutputOf versionedResourceIdentifier =
-    Task.attempt (OutputOfFetched versionedResourceIdentifier.versionID) <|
-        Concourse.Resource.fetchOutputOf versionedResourceIdentifier
 
 
 subscriptions : Model -> Sub Msg

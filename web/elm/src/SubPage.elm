@@ -29,6 +29,8 @@ import Pipeline.Effects
 import Pipeline.Msgs
 import QueryString
 import Resource
+import Resource.Effects
+import Resource.Msgs
 import Routes
 import String
 import UpdateMsg exposing (UpdateMsg)
@@ -48,7 +50,7 @@ type Model
 type Msg
     = BuildMsg (Autoscroll.Msg Build.Msgs.Msg)
     | JobMsg Job.Msgs.Msg
-    | ResourceMsg Resource.Msg
+    | ResourceMsg Resource.Msgs.Msg
     | PipelineMsg Pipeline.Msgs.Msg
     | NewCSRFToken String
     | DashboardPipelinesFetched (Result Http.Error (List Concourse.Pipeline))
@@ -112,15 +114,17 @@ init flags route =
                         Result.withDefault 0 (String.toInt buildId)
 
         Routes.Resource teamName pipelineName resourceName ->
-            superDupleWrap ( ResourceModel, ResourceMsg ) <|
-                Resource.init
-                    { title = Effects.setTitle }
+            superDupleWrap ( ResourceModel, ResourceMsg )
+                (Resource.init
                     { resourceName = resourceName
                     , teamName = teamName
                     , pipelineName = pipelineName
                     , paging = route.page
                     , csrfToken = flags.csrfToken
                     }
+                    |> Tuple.mapSecond
+                        (List.map Resource.Effects.runEffect >> Cmd.batch)
+                )
 
         Routes.Job teamName pipelineName jobName ->
             superDupleWrap ( JobModel, JobMsg )
@@ -267,7 +271,7 @@ urlUpdate route model =
 
         ( Routes.Resource teamName pipelineName resourceName, ResourceModel mdl ) ->
             superDupleWrap ( ResourceModel, ResourceMsg ) <|
-                Resource.changeToResource
+                (Resource.changeToResource
                     { teamName = teamName
                     , pipelineName = pipelineName
                     , resourceName = resourceName
@@ -275,6 +279,9 @@ urlUpdate route model =
                     , csrfToken = mdl.csrfToken
                     }
                     mdl
+                    |> Tuple.mapSecond
+                        (List.map Resource.Effects.runEffect >> Cmd.batch)
+                )
 
         ( Routes.Job teamName pipelineName jobName, JobModel mdl ) ->
             superDupleWrap ( JobModel, JobMsg )

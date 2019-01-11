@@ -12,6 +12,7 @@ import Pipeline
 import Pipeline.Msgs
 import QueryString
 import Resource
+import Resource.Msgs
 import Routes
 import SubPage exposing (..)
 import Test exposing (..)
@@ -59,11 +60,10 @@ all =
                 \_ ->
                     let
                         msg =
-                            Resource.ResourceFetched <| Err <| Http.BadStatus notFoundStatus
+                            Resource.Msgs.ResourceFetched <| Err <| Http.BadStatus notFoundStatus
 
                         ( model, _ ) =
                             Resource.init
-                                { title = \_ -> Cmd.none }
                                 { teamName = ""
                                 , pipelineName = ""
                                 , resourceName = ""
