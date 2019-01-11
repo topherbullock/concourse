@@ -3,14 +3,13 @@ module SubPageTests exposing (all)
 import Autoscroll
 import Build
 import Build.Msgs
-import Concourse.Pagination exposing (Paginated)
 import Dict exposing (Dict)
 import Expect
 import Http
 import Job exposing (..)
 import Pipeline
+import Pipeline.Msgs
 import QueryString
-import RemoteData exposing (WebData)
 import Resource
 import Routes
 import SubPage exposing (..)
@@ -96,9 +95,9 @@ all =
             , test "Pipeline not found" <|
                 \_ ->
                     let
-                        msg : Pipeline.Msg
+                        msg : Pipeline.Msgs.Msg
                         msg =
-                            Pipeline.PipelineFetched <| Err <| Http.BadStatus notFoundStatus
+                            Pipeline.Msgs.PipelineFetched <| Err <| Http.BadStatus notFoundStatus
 
                         pipelineLocator =
                             { teamName = ""
@@ -106,7 +105,7 @@ all =
                             }
 
                         ( model, _ ) =
-                            Pipeline.init { title = \_ -> Cmd.none, render = \( _, _ ) -> Cmd.none }
+                            Pipeline.init
                                 { teamName = ""
                                 , pipelineName = ""
                                 , route =

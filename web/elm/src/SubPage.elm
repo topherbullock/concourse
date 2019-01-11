@@ -1,4 +1,12 @@
-port module SubPage exposing (Model(..), Msg(..), init, subscriptions, update, urlUpdate, view)
+module SubPage exposing
+    ( Model(..)
+    , Msg(..)
+    , init
+    , subscriptions
+    , update
+    , urlUpdate
+    , view
+    )
 
 import Autoscroll
 import Build
@@ -7,29 +15,21 @@ import Build.Msgs
 import Concourse
 import Dashboard
 import Dashboard.Msgs
+import Effects
 import FlySuccess
 import Html exposing (Html)
 import Html.Styled as HS
 import Http
 import Job
-import Json.Encode
 import NotFound
 import Pipeline
+import Pipeline.Effects
+import Pipeline.Msgs
 import QueryString
 import Resource
 import Routes
 import String
 import UpdateMsg exposing (UpdateMsg)
-
-
-
--- TODO: move ports somewhere else
-
-
-port renderPipeline : ( Json.Encode.Value, Json.Encode.Value ) -> Cmd msg
-
-
-port setTitle : String -> Cmd msg
 
 
 type Model
@@ -47,7 +47,7 @@ type Msg
     = BuildMsg (Autoscroll.Msg Build.Msgs.Msg)
     | JobMsg Job.Msg
     | ResourceMsg Resource.Msg
-    | PipelineMsg Pipeline.Msg
+    | PipelineMsg Pipeline.Msgs.Msg
     | NewCSRFToken String
     | DashboardPipelinesFetched (Result Http.Error (List Concourse.Pipeline))
     | DashboardMsg Dashboard.Msgs.Msg
@@ -87,7 +87,7 @@ init flags route =
                     Build.getScrollBehavior
                     << Tuple.mapSecond (Cmd.batch << List.map Effects.toCmd)
                     << Build.init
-                        { title = setTitle }
+                        { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
                 <|
                     Build.JobBuildPage
@@ -103,7 +103,7 @@ init flags route =
                     Build.getScrollBehavior
                     << Tuple.mapSecond (Cmd.batch << List.map Effects.toCmd)
                     << Build.init
-                        { title = setTitle }
+                        { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
                 <|
                     Build.BuildPage <|
@@ -112,7 +112,7 @@ init flags route =
         Routes.Resource teamName pipelineName resourceName ->
             superDupleWrap ( ResourceModel, ResourceMsg ) <|
                 Resource.init
-                    { title = setTitle }
+                    { title = Effects.setTitle }
                     { resourceName = resourceName
                     , teamName = teamName
                     , pipelineName = pipelineName
@@ -123,7 +123,7 @@ init flags route =
         Routes.Job teamName pipelineName jobName ->
             superDupleWrap ( JobModel, JobMsg ) <|
                 Job.init
-                    { title = setTitle }
+                    { title = Effects.setTitle }
                     { jobName = jobName
                     , teamName = teamName
                     , pipelineName = pipelineName
@@ -132,21 +132,21 @@ init flags route =
                     }
 
         Routes.Pipeline teamName pipelineName ->
-            superDupleWrap ( PipelineModel, PipelineMsg ) <|
-                Pipeline.init
-                    { render = renderPipeline
-                    , title = setTitle
-                    }
+            superDupleWrap ( PipelineModel, PipelineMsg )
+                (Pipeline.init
                     { teamName = teamName
                     , pipelineName = pipelineName
                     , turbulenceImgSrc = flags.turbulencePath
                     , route = route
                     }
+                    |> Tuple.mapSecond
+                        (List.map Pipeline.Effects.runEffect >> Cmd.batch)
+                )
 
         Routes.Dashboard ->
             superDupleWrap ( DashboardModel, DashboardMsg ) <|
                 Dashboard.init
-                    { title = setTitle }
+                    { title = Effects.setTitle }
                     { turbulencePath = flags.turbulencePath
                     , csrfToken = flags.csrfToken
                     , search = querySearchForRoute route
@@ -157,7 +157,7 @@ init flags route =
         Routes.DashboardHd ->
             superDupleWrap ( DashboardModel, DashboardMsg ) <|
                 Dashboard.init
-                    { title = setTitle }
+                    { title = Effects.setTitle }
                     { turbulencePath = flags.turbulencePath
                     , csrfToken = flags.csrfToken
                     , search = querySearchForRoute route
@@ -177,7 +177,7 @@ handleNotFound : String -> ( a -> Model, c -> Msg ) -> ( a, Cmd c, Maybe UpdateM
 handleNotFound notFound ( mdlFunc, msgFunc ) ( mdl, msg, outMessage ) =
     case outMessage of
         Just UpdateMsg.NotFound ->
-            ( NotFoundModel { notFoundImgSrc = notFound }, setTitle "Not Found " )
+            ( NotFoundModel { notFoundImgSrc = notFound }, Effects.setTitle "Not Found " )
 
         Nothing ->
             superDupleWrap ( mdlFunc, msgFunc ) <| ( mdl, msg )
@@ -218,7 +218,10 @@ update turbulence notFound csrfToken msg mdl =
             handleNotFound notFound ( JobModel, JobMsg ) (Job.updateWithMessage message { model | csrfToken = csrfToken })
 
         ( PipelineMsg message, PipelineModel model ) ->
-            handleNotFound notFound ( PipelineModel, PipelineMsg ) (Pipeline.updateWithMessage message model)
+            handleNotFound
+                notFound
+                ( PipelineModel, PipelineMsg )
+                (Pipeline.updateWithMessage message model)
 
         ( NewCSRFToken c, ResourceModel model ) ->
             ( ResourceModel { model | csrfToken = c }, Cmd.none )
