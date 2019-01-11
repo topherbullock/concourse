@@ -10,7 +10,6 @@ module SubPage exposing
 
 import Autoscroll
 import Build
-import Build.Effects
 import Build.Msgs
 import Concourse
 import Dashboard
@@ -92,9 +91,8 @@ init flags route =
             superDupleWrap ( BuildModel, BuildMsg ) <|
                 Autoscroll.init
                     Build.getScrollBehavior
-                    << Tuple.mapSecond (Cmd.batch << List.map Build.Effects.toCmd)
+                    << Tuple.mapSecond (Cmd.batch << List.map Effects.runEffect)
                     << Build.init
-                        { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
                 <|
                     Build.JobBuildPage
@@ -108,9 +106,8 @@ init flags route =
             superDupleWrap ( BuildModel, BuildMsg ) <|
                 Autoscroll.init
                     Build.getScrollBehavior
-                    << Tuple.mapSecond (Cmd.batch << List.map Build.Effects.toCmd)
+                    << Tuple.mapSecond (Cmd.batch << List.map Effects.runEffect)
                     << Build.init
-                        { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
                 <|
                     Build.BuildPage <|
@@ -214,7 +211,7 @@ update turbulence notFound csrfToken msg mdl =
             in
             ( BuildModel { scrollModel | subModel = newBuildModel }
             , buildEffects
-                |> List.map Build.Effects.toCmd
+                |> List.map Effects.runEffect
                 |> Cmd.batch
                 |> Cmd.map (\buildMsg -> BuildMsg (Autoscroll.SubMsg buildMsg))
             )
@@ -324,7 +321,7 @@ urlUpdate route model =
                             }
                         )
                         scrollModel.subModel
-                        |> Tuple.mapSecond (List.map Build.Effects.toCmd)
+                        |> Tuple.mapSecond (List.map Effects.runEffect)
                         |> Tuple.mapSecond Cmd.batch
             in
             ( BuildModel { scrollModel | subModel = submodel }
