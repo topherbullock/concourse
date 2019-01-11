@@ -10,7 +10,7 @@ module SubPage exposing
 
 import Autoscroll
 import Build
-import Build.Effects as Effects
+import Build.Effects
 import Build.Msgs
 import Concourse
 import Dashboard
@@ -21,6 +21,8 @@ import Html exposing (Html)
 import Html.Styled as HS
 import Http
 import Job
+import Job.Effects
+import Job.Msgs
 import NotFound
 import Pipeline
 import Pipeline.Effects
@@ -45,7 +47,7 @@ type Model
 
 type Msg
     = BuildMsg (Autoscroll.Msg Build.Msgs.Msg)
-    | JobMsg Job.Msg
+    | JobMsg Job.Msgs.Msg
     | ResourceMsg Resource.Msg
     | PipelineMsg Pipeline.Msgs.Msg
     | NewCSRFToken String
@@ -85,7 +87,7 @@ init flags route =
             superDupleWrap ( BuildModel, BuildMsg ) <|
                 Autoscroll.init
                     Build.getScrollBehavior
-                    << Tuple.mapSecond (Cmd.batch << List.map Effects.toCmd)
+                    << Tuple.mapSecond (Cmd.batch << List.map Build.Effects.toCmd)
                     << Build.init
                         { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
@@ -101,7 +103,7 @@ init flags route =
             superDupleWrap ( BuildModel, BuildMsg ) <|
                 Autoscroll.init
                     Build.getScrollBehavior
-                    << Tuple.mapSecond (Cmd.batch << List.map Effects.toCmd)
+                    << Tuple.mapSecond (Cmd.batch << List.map Build.Effects.toCmd)
                     << Build.init
                         { title = Effects.setTitle }
                         { csrfToken = flags.csrfToken, hash = route.hash }
@@ -121,15 +123,17 @@ init flags route =
                     }
 
         Routes.Job teamName pipelineName jobName ->
-            superDupleWrap ( JobModel, JobMsg ) <|
-                Job.init
-                    { title = Effects.setTitle }
+            superDupleWrap ( JobModel, JobMsg )
+                (Job.init
                     { jobName = jobName
                     , teamName = teamName
                     , pipelineName = pipelineName
                     , paging = route.page
                     , csrfToken = flags.csrfToken
                     }
+                    |> Tuple.mapSecond
+                        (List.map Job.Effects.runEffect >> Cmd.batch)
+                )
 
         Routes.Pipeline teamName pipelineName ->
             superDupleWrap ( PipelineModel, PipelineMsg )
@@ -196,7 +200,7 @@ update turbulence notFound csrfToken msg mdl =
             in
             ( BuildModel { scrollModel | subModel = newBuildModel }
             , buildEffects
-                |> List.map Effects.toCmd
+                |> List.map Build.Effects.toCmd
                 |> Cmd.batch
                 |> Cmd.map (\buildMsg -> BuildMsg (Autoscroll.SubMsg buildMsg))
             )
@@ -273,8 +277,8 @@ urlUpdate route model =
                     mdl
 
         ( Routes.Job teamName pipelineName jobName, JobModel mdl ) ->
-            superDupleWrap ( JobModel, JobMsg ) <|
-                Job.changeToJob
+            superDupleWrap ( JobModel, JobMsg )
+                (Job.changeToJob
                     { teamName = teamName
                     , pipelineName = pipelineName
                     , jobName = jobName
@@ -282,6 +286,9 @@ urlUpdate route model =
                     , csrfToken = mdl.csrfToken
                     }
                     mdl
+                    |> Tuple.mapSecond
+                        (List.map Job.Effects.runEffect >> Cmd.batch)
+                )
 
         ( Routes.Build teamName pipelineName jobName buildName, BuildModel scrollModel ) ->
             let
@@ -295,7 +302,7 @@ urlUpdate route model =
                             }
                         )
                         scrollModel.subModel
-                        |> Tuple.mapSecond (List.map Effects.toCmd)
+                        |> Tuple.mapSecond (List.map Build.Effects.toCmd)
                         |> Tuple.mapSecond Cmd.batch
             in
             ( BuildModel { scrollModel | subModel = submodel }
