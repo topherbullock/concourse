@@ -54,15 +54,11 @@ var _ = Describe("Worker", func() {
 
 		fakeGardenContainer    *gardenfakes.FakeContainer
 		fakeBaggageclaimClient *baggageclaimfakes.FakeClient
-		//fakeVolumeClient       *workerfakes.FakeVolumeClient
-		//fakeImageFactory       *workerfakes.FakeImageFactory
-		//fakeImage              *workerfakes.FakeImage
 		fakeDBTeam             *dbfakes.FakeTeam
 		fakeDBWorker           *dbfakes.FakeWorker
 		fakeDBVolumeRepository *dbfakes.FakeVolumeRepository
 		fakeLockFactory        *lockfakes.FakeLockFactory
-
-		containerProvider ContainerProvider
+		fakeDBTeamFactory *dbfakes.FakeTeamFactory
 
 		fakeLocalInput    *workerfakes.FakeInputSource
 		fakeRemoteInput   *workerfakes.FakeInputSource
@@ -114,7 +110,7 @@ var _ = Describe("Worker", func() {
 		fakeImageFactory.GetImageReturns(fakeImage, nil)
 		fakeLockFactory = new(lockfakes.FakeLockFactory)
 
-		fakeDBTeamFactory := new(dbfakes.FakeTeamFactory)
+		fakeDBTeamFactory = new(dbfakes.FakeTeamFactory)
 		fakeDBTeam = new(dbfakes.FakeTeam)
 		fakeDBTeamFactory.GetByIDReturns(fakeDBTeam)
 		fakeDBVolumeRepository = new(dbfakes.FakeVolumeRepository)
@@ -126,15 +122,15 @@ var _ = Describe("Worker", func() {
 		fakeDBWorker.HTTPSProxyURLReturns("https://proxy.com")
 		fakeDBWorker.NoProxyReturns("http://noproxy.com")
 
-		containerProvider = NewContainerProvider(
-			fakeGardenClient,
-			fakeVolumeClient,
-			fakeDBWorker,
-			fakeImageFactory,
-			fakeDBVolumeRepository,
-			fakeDBTeamFactory,
-			fakeLockFactory,
-		)
+		//containerProvider = NewContainerProvider(
+		//	fakeGardenClient,
+		//	fakeVolumeClient,
+		//	fakeDBWorker,
+		//	fakeImageFactory,
+		//	fakeDBVolumeRepository,
+		//	fakeDBTeamFactory,
+		//	fakeLockFactory,
+		//)
 
 		fakeLocalInput = new(workerfakes.FakeInputSource)
 		fakeLocalInput.DestinationPathReturns("/some/work-dir/local-input")
@@ -295,24 +291,27 @@ var _ = Describe("Worker", func() {
 	})
 
 	JustBeforeEach(func() {
-		dbWorker := new(dbfakes.FakeWorker)
-		dbWorker.ActiveContainersReturns(activeContainers)
-		dbWorker.ResourceTypesReturns(resourceTypes)
-		dbWorker.PlatformReturns(platform)
-		dbWorker.TagsReturns(tags)
-		dbWorker.EphemeralReturns(ephemeral)
-		dbWorker.TeamIDReturns(teamID)
-		dbWorker.NameReturns(workerName)
-		dbWorker.StartTimeReturns(workerStartTime)
-		dbWorker.VersionReturns(&workerVersion)
+		fakeDBWorker.ActiveContainersReturns(activeContainers)
+		fakeDBWorker.ResourceTypesReturns(resourceTypes)
+		fakeDBWorker.PlatformReturns(platform)
+		fakeDBWorker.TagsReturns(tags)
+		fakeDBWorker.EphemeralReturns(ephemeral)
+		fakeDBWorker.TeamIDReturns(teamID)
+		fakeDBWorker.NameReturns(workerName)
+		fakeDBWorker.StartTimeReturns(workerStartTime)
+		fakeDBWorker.VersionReturns(&workerVersion)
+		fakeDBWorker.CreateContainerReturns(fakeCreatingContainer, nil)
 
 		gardenWorker = NewGardenWorker(
 			fakeGardenClient,
 			fakeContainerProvider,
 			fakeVolumeClient,
 			fakeImageFactory,
-			dbWorker,
+			fakeDBWorker,
 			0,
+			fakeLockFactory,
+			fakeDBVolumeRepository,
+			fakeDBTeamFactory,
 		)
 
 	})
@@ -775,21 +774,20 @@ var _ = Describe("Worker", func() {
 		}
 
 		BeforeEach(func() {
-			fakeDBWorker.CreateContainerReturns(fakeCreatingContainer, nil)
+			//fakeDBWorker.CreateContainerReturns(fakeCreatingContainer, nil)
 			fakeLockFactory.AcquireReturns(new(lockfakes.FakeLock), true, nil)
 		})
 
 		JustBeforeEach(func() {
-			findOrCreateContainer, findOrCreateErr = containerProvider.FindOrCreateContainer(
+			findOrCreateContainer, findOrCreateErr = gardenWorker.FindOrCreateContainer(
 				ctx,
 				logger,
-				fakeContainerOwner,
 				fakeImageFetchingDelegate,
+				fakeContainerOwner,
 				containerMetadata,
 				containerSpec,
 				workerSpec,
 				versionedResourceTypes,
-				fakeImage,
 			)
 		})
 
@@ -808,6 +806,7 @@ var _ = Describe("Worker", func() {
 				})
 
 				It("marks container as created", func() {
+					Expect(findOrCreateErr).ToNot(HaveOccurred())
 					Expect(fakeCreatingContainer.CreatedCallCount()).To(Equal(1))
 				})
 
@@ -1444,7 +1443,7 @@ var _ = Describe("Worker", func() {
 		})
 	})
 
-	Describe("FindCreatedContainerByHandle", func() {
+	Describe("FindContainerByHandle", func() {
 		var (
 			foundContainer Container
 			findErr        error
@@ -1452,7 +1451,7 @@ var _ = Describe("Worker", func() {
 		)
 
 		JustBeforeEach(func() {
-			foundContainer, found, findErr = containerProvider.FindCreatedContainerByHandle(logger, "some-container-handle", 42)
+			foundContainer, found, findErr = gardenWorker.FindContainerByHandle(logger, 42, "some-container-handle")
 		})
 
 		Context("when the gardenClient returns a container and no error", func() {

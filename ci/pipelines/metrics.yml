@@ -1,0 +1,66 @@
+---
+resources:
+- name: 1h-interval
+  type: time
+  source:
+    interval: 1h
+
+jobs:
+- name: check-prod-build-containers
+  plan:
+  - get: 1h-interval
+    trigger: true
+  - task: check-prod-build-containers
+    config:
+      platform: linux
+
+      image_resource:
+        type: registry-image
+        source: {repository: concourse/unit}
+
+      params:
+        BOSH_TARGET: ((bosh_target))
+        BOSH_CLIENT: ((bosh_client.id))
+        BOSH_CLIENT_SECRET: ((bosh_client.secret))
+        BOSH_DEPLOYMENT: concourse-prod
+        GCP_KEY: ((prod_gcp_key))
+
+      run:
+        path: sh
+        args:
+        - '-ec'
+        - |
+          trap "rm /tmp/authbosh.fifo" EXIT
+
+          eval `ssh-agent -s`
+          echo "${GCP_KEY}" > /tmp/authbosh.fifo
+          chmod 600 /tmp/authbosh.fifo
+          ssh-add -t8h /tmp/authbosh.fifo
+
+          bosh alias-env prod -e ${BOSH_TARGET}
+          bosh -e prod -d ${BOSH_DEPLOYMENT} ssh db/0 "/var/vcap/packages/postgres-11.1/bin/psql -U concourse -d atc -c \"select workers.platform, containers.worker_name, count(*) from containers join workers on workers.name=containers.worker_name where containers.meta_type!='check' group by containers.worker_name, workers.platform\""
+
+- name: check-wings-build-containers
+  plan:
+  - get: 1h-interval
+    trigger: true
+  - task: check-wings-build-containers
+    config:
+      platform: linux
+
+      image_resource:
+        type: registry-image
+        source: {repository: concourse/unit}
+
+      params:
+        PGPASSWORD: ((postgres_password))
+
+      run:
+        path: sh
+        args:
+        - '-ec'
+        - |
+          psql -h 104.198.42.60 -U atc -d atc -c "select workers.platform, containers.worker_name, count(*) from containers join workers on workers.name=containers.worker_name where containers.meta_type!='check' group by containers.worker_name, workers.platform"
+
+
+

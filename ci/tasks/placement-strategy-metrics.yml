@@ -1,0 +1,11 @@
+---
+platform: linux
+
+params:
+  BOSH_TARGET:
+  BOSH_CLIENT:
+  BOSH_CLIENT_SECRET:
+  BOSH_DEPLOYMENT:
+
+run:
+  path: concourse/ci/tasks/scripts/placement-strategy-metrics.sh
