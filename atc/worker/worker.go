@@ -168,23 +168,11 @@ func (worker *gardenWorker) FindOrCreateContainer(
 	resourceTypes creds.VersionedResourceTypes,
 ) (Container, error) {
 
-	image, err := worker.imageFactory.GetImage(
-		logger,
-		worker,
-		worker.volumeClient,
-		containerSpec.ImageSpec,
-		containerSpec.TeamID,
-		delegate,
-		resourceTypes,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	var (
 		gardenContainer   garden.Container
 		createdContainer  db.CreatedContainer
 		creatingContainer db.CreatingContainer
+		err error
 	)
 
 	for {
@@ -256,11 +244,42 @@ func (worker *gardenWorker) FindOrCreateContainer(
 			defer containerLock.Release()
 
 			logger.Debug("fetching-image")
+			image, err := worker.imageFactory.GetImage(
+				logger,
+				worker,
+				worker.volumeClient,
+				containerSpec.ImageSpec,
+				containerSpec.TeamID,
+				delegate,
+				resourceTypes,
+			)
+			if err != nil {
+				return nil, err
+			}
 
 			fetchedImage, err := image.FetchForContainer(ctx, logger, creatingContainer)
 			if err != nil {
 				creatingContainer.Failed()
 				logger.Error("failed-to-fetch-image-for-container", err)
+				return nil, err
+			}
+
+			logger.Debug("creating-volumes-for-container")
+
+			volumeMounts, err := worker.createVolumesForContainer(
+				logger,
+				creatingContainer,
+				containerSpec,
+				fetchedImage,
+			)
+			if err != nil {
+				_, failedErr := creatingContainer.Failed()
+				if failedErr != nil {
+					logger.Error("failed-to-mark-container-as-failed", err)
+				}
+				metric.FailedContainers.Inc()
+
+				logger.Error("failed-to-create-volumes-for-container", err)
 				return nil, err
 			}
 
@@ -271,6 +290,7 @@ func (worker *gardenWorker) FindOrCreateContainer(
 				creatingContainer,
 				containerSpec,
 				fetchedImage,
+				volumeMounts,
 			)
 			if err != nil {
 				_, failedErr := creatingContainer.Failed()
@@ -500,12 +520,12 @@ func (worker *gardenWorker) constructGardenWorkerContainer(
 	)
 }
 
-func (worker *gardenWorker) createGardenContainer(
+func (worker *gardenWorker) createVolumesForContainer(
 	logger lager.Logger,
 	creatingContainer db.CreatingContainer,
 	spec ContainerSpec,
 	fetchedImage FetchedImage,
-) (garden.Container, error) {
+) ([]VolumeMount, error) {
 	var volumeMounts []VolumeMount
 	var ioVolumeMounts []VolumeMount
 
@@ -639,6 +659,19 @@ func (worker *gardenWorker) createGardenContainer(
 			MountPath: cleanedOutputPath,
 		})
 	}
+	sort.Sort(byMountPath(ioVolumeMounts))
+	volumeMounts = append(volumeMounts, ioVolumeMounts...)
+	return volumeMounts, nil
+}
+
+func (worker *gardenWorker) createGardenContainer(
+	logger lager.Logger,
+	creatingContainer db.CreatingContainer,
+	spec ContainerSpec,
+	fetchedImage FetchedImage,
+	volumeMounts []VolumeMount,
+) (garden.Container, error) {
+
 	bindMounts := []garden.BindMount{}
 
 	for _, mount := range spec.BindMounts {
@@ -651,8 +684,6 @@ func (worker *gardenWorker) createGardenContainer(
 		}
 	}
 
-	sort.Sort(byMountPath(ioVolumeMounts))
-	volumeMounts = append(volumeMounts, ioVolumeMounts...)
 
 	for _, mount := range volumeMounts {
 		bindMounts = append(bindMounts, garden.BindMount{
