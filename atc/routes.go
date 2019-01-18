@@ -81,6 +81,7 @@ const (
 
 	ListContainers           = "ListContainers"
 	GetContainer             = "GetContainer"
+	CreateShell              = "CreateShell"
 	HijackContainer          = "HijackContainer"
 	ListDestroyingContainers = "ListDestroyingContainers"
 	ReportWorkerContainers   = "ReportWorkerContainers"
@@ -185,6 +186,7 @@ var Routes = rata.Routes([]rata.Route{
 	{Path: "/api/v1/containers/destroying", Method: "GET", Name: ListDestroyingContainers},
 	{Path: "/api/v1/containers/report", Method: "PUT", Name: ReportWorkerContainers},
 	{Path: "/api/v1/teams/:team_name/containers", Method: "GET", Name: ListContainers},
+	{Path: "/api/v1/teams/:team_name/shell", Method: "POST", Name: CreateShell},
 	{Path: "/api/v1/teams/:team_name/containers/:id", Method: "GET", Name: GetContainer},
 	{Path: "/api/v1/teams/:team_name/containers/:id/hijack", Method: "GET", Name: HijackContainer},
 

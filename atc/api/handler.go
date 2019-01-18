@@ -177,6 +177,7 @@ func NewHandler(
 		atc.ListContainers:           teamHandlerFactory.HandlerFor(containerServer.ListContainers),
 		atc.GetContainer:             teamHandlerFactory.HandlerFor(containerServer.GetContainer),
 		atc.HijackContainer:          teamHandlerFactory.HandlerFor(containerServer.HijackContainer),
+		atc.CreateShell:              teamHandlerFactory.HandlerFor(containerServer.CreateShell),
 		atc.ListDestroyingContainers: http.HandlerFunc(containerServer.ListDestroyingContainers),
 		atc.ReportWorkerContainers:   http.HandlerFunc(containerServer.ReportWorkerContainers),
 

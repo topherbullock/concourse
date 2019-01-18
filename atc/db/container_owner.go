@@ -216,3 +216,18 @@ func (c resourceConfigCheckSessionContainerOwner) Create(tx Tx, workerName strin
 		"resource_config_check_session_id": rccsID,
 	}, nil
 }
+
+type ShellContainerOwner struct {
+	TeamID    int
+}
+
+func (c ShellContainerOwner) Find(Conn) (sq.Eq, bool, error) {
+	return nil, true, nil
+}
+
+func (c ShellContainerOwner) Create(Tx, string) (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"runtime_lifecycle": true,
+		"team_id": c.TeamID,
+	}, nil
+}

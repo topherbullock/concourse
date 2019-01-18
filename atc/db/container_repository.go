@@ -205,6 +205,7 @@ func (repository *containerRepository) FindOrphanedContainers() ([]CreatingConta
 				"c.image_check_container_id":         nil,
 				"c.image_get_container_id":           nil,
 				"c.resource_config_check_session_id": nil,
+				"c.runtime_lifecycle":                false,
 			},
 			sq.And{
 				sq.NotEq{"c.build_id": nil},
